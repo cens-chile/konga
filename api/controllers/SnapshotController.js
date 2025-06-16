@@ -5,13 +5,15 @@
  * @help        :: See http://sailsjs.org/#!/documentation/concepts/Controllers
  */
 
+
 const KongService = require('../services/KongService');
 const SnapshotsService = require('../services/SnapshotsService');
 const _ = require('lodash')
 const async = require('async');
 const fs = require('fs');
 const semver = require('semver');
-
+const pLimit = require("p-limit");
+const limit = pLimit(5);
 /**
  * Custom logic functions
  */
@@ -116,7 +118,7 @@ module.exports = _.merge(_.cloneDeep(require('../base/Controller')), {
               makeResponseData(responseData, 'consumers');
               await Promise.all(snapshot.data['consumers'].map(async (consumer) => {
                 try {
-                  await KongService.put(`/${entity}/${consumer.id}`, req.connection, _.omit(consumer, ["id", "credentials"]));
+                  await limit(() => KongService.put(`/${entity}/${consumer.id}`, req.connection, _.omit(consumer, ["id", "credentials"])));
                   responseData['consumers'].imported++;
 
                   // Apply credentials to the consumer
@@ -132,7 +134,7 @@ module.exports = _.merge(_.cloneDeep(require('../base/Controller')), {
                       await Promise.all(consumer.credentials[key].map(async (cred) => {
                         const singularKey = plural2singularMAP[key] || key;
                         try {
-                          await KongService.post(`/consumers/${consumer.id}/${singularKey}`, req.connection, _.omit(cred, ["id", "consumer"]));
+                          await limit(() => KongService.post(`/consumers/${consumer.id}/${singularKey}`, req.connection, _.omit(cred, ["id", "consumer", "tags", "ttl", "created_at"])));
                           responseData[key].imported++;
                         } catch (e) {
 
@@ -164,13 +166,13 @@ module.exports = _.merge(_.cloneDeep(require('../base/Controller')), {
               // Create upstreams
               await Promise.all(snapshot.data['upstreams'].map(async (upstream) => {
                 try {
-                  await KongService.put(`/upstreams/${upstream.id}`, req.connection, _.omit(upstream, ["id", "targets"]));
+                  await limit(() => KongService.put(`/upstreams/${upstream.id}`, req.connection, _.omit(upstream, ["id", "targets"])));
                   responseData['upstreams'].imported++;
                   // Create the upstream targets if needed
                   if (upstream.targets) {
                     await Promise.all(upstream.targets.map(async (target) => {
                       try {
-                        await KongService.post(`/upstreams/${upstream.id}/targets`, req.connection, _.pick(target, ["target", "weight"]));
+                        await limit(() => KongService.post(`/upstreams/${upstream.id}/targets`, req.connection, _.pick(target, ["target", "weight"])));
                         responseData['upstream_targets'].imported++;
                       } catch (e) {
                         makeResponseDataError(responseData, 'upstream_targets', e);
@@ -195,7 +197,7 @@ module.exports = _.merge(_.cloneDeep(require('../base/Controller')), {
 
               await Promise.all(snapshot.data[entity].map(async (item) => {
                 try {
-                  await KongService.put(`/${entity}/${item.id}`, req.connection, _.omit(item, ["id", "extras"]));
+                  await limit(() => KongService.put(`/${entity}/${item.id}`, req.connection, _.omit(item, ["id", "extras"])));
                   responseData[entity].imported++;
                 } catch (e) {
 
